@@ -1,4 +1,5 @@
 # coordinator.py
+import logging
 import asyncio
 import aiohttp
 from aiohttp import web
@@ -6,6 +7,7 @@ import json
 import uuid
 from datetime import datetime
 from typing import Dict, Set
+logging.basicConfig(level=logging.INFO)
 
 class Coordinator:
     def __init__(self):
@@ -59,6 +61,20 @@ class Coordinator:
         self.pending_tasks[task_id] = task
         await self.task_queue.put(task)
         return task_id
+    
+    async def cleanup_stale_nodes(self):
+    while True:
+        await asyncio.sleep(60)
+        now = datetime.now()
+        stale = []
+        async with self.lock:
+            for node_id, info in self.nodes.items():
+                last = datetime.fromisoformat(info["last_heartbeat"])
+                if (now - last).total_seconds() > 120:  # 2 minutes
+                    stale.append(node_id)
+            for node_id in stale:
+                del self.nodes[node_id]
+                logging.warning(f"Node {node_id} removed (stale)")
 
     async def start(self):
         app = web.Application()
@@ -73,3 +89,4 @@ class Coordinator:
         logging.info("Coordinator listening on port 8080")
         # Keep running
         await asyncio.Event().wait()
+        asyncio.create_task(self.cleanup_stale_nodes())
