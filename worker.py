@@ -2,15 +2,15 @@
 import asyncio
 import aiohttp
 import logging
-from scanner import AdvancedScanner   # your scanning logic
+from scanner_core import AdvancedScanner, MLReconEngine, ThreatIntelligence   # your scanning logic
 
 class Worker:
-    def __init__(self, node_id: str, coordinator_url: str, capabilities: list):
+    def __init__(self, node_id: str, coordinator_url: str, capabilities: list, config: dict):
         self.node_id = node_id
         self.coordinator_url = coordinator_url
         self.capabilities = capabilities
         self.current_load = 0
-        self.scanner = AdvancedScanner()  # instantiate your scanner
+        self.scanner = AdvancedScanner(config, MLReconEngine(), ThreatIntelligence())  # instantiate your scanner
         self.session = None
 
     async def start(self):
