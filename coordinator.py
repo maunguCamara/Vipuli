@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, Set
 logging.basicConfig(level=logging.INFO)
+from config import get_config
 
 class Coordinator:
     def __init__(self):
@@ -15,6 +16,21 @@ class Coordinator:
         self.task_queue = asyncio.Queue()
         self.pending_tasks: Dict[str, dict] = {}
         self.lock = asyncio.Lock()
+    
+    async def main():
+        parser = argparse.ArgumentParser()
+        parser.add_argument("-c", "--config", default="config.yaml")
+        args = parser.parse_args()
+        
+        # Load config once
+        config = load_config(args.config)
+        
+        # Pass relevant sections to components
+        coordinator_config = config["coordinator"]
+        system_config = config["system"]
+        
+        coordinator = Coordinator(coordinator_config, system_config)
+    await coordinator.start()
 
     async def register_node(self, request):
         data = await request.json()

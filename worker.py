@@ -10,8 +10,22 @@ class Worker:
         self.coordinator_url = coordinator_url
         self.capabilities = capabilities
         self.current_load = 0
-        self.scanner = AdvancedScanner(config, MLReconEngine(), ThreatIntelligence())  # instantiate your scanner
+        self.config = config
+        self.scanner = AdvancedScanner(config["scanning"],
+         MLReconEngine(config.get("ml", {})),
+          ThreatIntelligence(config.get("threat_intel", {})))  # instantiate your scanner
         self.session = None
+
+    async def main():
+        parser = argparse.ArgumentParser()
+        parser.add_argument("-c", "--config", default="config.yaml")
+        parser.add_argument("--id", required=True)
+        parser.add_argument("--coordinator", required=True)
+        args = parser.parse_args()
+        
+        config = load_config(args.config)   # from config.py
+        worker = Worker(args.id, args.coordinator, config["worker"]["capabilities"], config)
+    await worker.start()
 
     async def start(self):
         await self.ml_engine.load_models()  # Load ML models before registering
