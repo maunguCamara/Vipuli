@@ -14,6 +14,7 @@ class Worker:
         self.session = None
 
     async def start(self):
+        await self.ml_engine.load_models()  # Load ML models before registering
         self.session = aiohttp.ClientSession()
         await self.register()
         asyncio.create_task(self.heartbeat_loop())
