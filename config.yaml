@@ -1,0 +1,16 @@
+# config.yaml
+coordinator:
+  host: "0.0.0.0"
+  port: 8080
+
+worker:
+  node_id: "worker-1"
+  capabilities: ["scan", "ml"]
+
+scanning:
+  common_ports: [80, 443, 22]
+  connect_timeout: 3.0
+
+ml:
+  subdomain_model_path: "models/subdomain.h5"
+  vuln_model_path: "models/vuln.h5"
