@@ -76,6 +76,29 @@ class Coordinator:
                 del self.nodes[node_id]
                 logging.warning(f"Node {node_id} removed (stale)")
 
+
+    async def submit_scan_api(self, request):
+    data = await request.json()
+    target = data["target"]
+    scan_type = data.get("type", "comprehensive")
+    task_id = await self.submit_scan(target, scan_type)
+    return web.json_response({"task_id": task_id})
+
+    async def get_task_status(self, request):
+        task_id = request.match_info["task_id"]
+        task = self.pending_tasks.get(task_id)
+        if not task:
+            return web.json_response({"error": "not found"}, status=404)
+        status = "completed" if "result" in task else "pending"
+            return web.json_response({"task_id": task_id, "status": status})
+
+    async def get_result(self, request):
+        task_id = request.match_info["task_id"]
+        task = self.pending_tasks.get(task_id)
+        if task and "result" in task:
+            return web.json_response(task["result"])
+        return web.json_response({"error": "not found"}, status=404)
+
     async def start(self):
         app = web.Application()
         app.router.add_post("/register", self.register_node)
@@ -90,3 +113,8 @@ class Coordinator:
         # Keep running
         await asyncio.Event().wait()
         asyncio.create_task(self.cleanup_stale_nodes())
+    
+    # Register
+app.router.add_post("/scan", self.submit_scan_api)
+app.router.add_get("/status/{task_id}", self.get_task_status)
+app.router.add_get("/result/{task_id}", self.get_result)
