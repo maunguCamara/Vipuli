@@ -10,6 +10,8 @@ from typing import Dict, Set
 logging.basicConfig(level=logging.INFO)
 from config import get_config
 
+API_KEY = os.environ["COORDINATOR_API_KEY"]
+        
 class Coordinator:
     def __init__(self):
         self.nodes: Dict[str, dict] = {}          # node_id -> {ip, port, last_heartbeat, load}
@@ -33,6 +35,8 @@ class Coordinator:
     await coordinator.start()
 
     async def register_node(self, request):
+        if request.headers.get("X-API-Key") != API_KEY:
+            return web.Response(status=401)
         data = await request.json()
         node_id = data["node_id"]
         async with self.lock:
@@ -58,6 +62,8 @@ class Coordinator:
         """Worker asks for a task (long polling)."""
         try:
             task = await asyncio.wait_for(self.task_queue.get(), timeout=5)
+            await redis.push('task_queue', json.dumps(task))  # Store in Redis for persistence
+ 
         except asyncio.TimeoutError:
             return web.json_response({"task": None})
         return web.json_response(task)
@@ -115,11 +121,21 @@ class Coordinator:
             return web.json_response(task["result"])
         return web.json_response({"error": "not found"}, status=404)
 
+    async def health(request):
+        return web.Response(status=200)
+
+    async def ready(request):
+        # Check database connection, last heartbeat, etc.
+        if coordinator.db_healthy and len(coordinator.nodes) > 0:
+            return web.Response(status=200)
+        return web.Response(status=503)
+
+
     async def start(self):
         app = web.Application()
         app.router.add_post("/register", self.register_node)
         app.router.add_post("/heartbeat", self.heartbeat)
-        app.router.add_get("/task", self.get_task)
+        #app.router.add_get("/task", self.get_task)
         app.router.add_post("/result", self.submit_result)
         runner = web.AppRunner(app)
         await runner.setup()
@@ -130,7 +146,22 @@ class Coordinator:
         await asyncio.Event().wait()
         asyncio.create_task(self.cleanup_stale_nodes())
     
-    # Register
+
+    async def shutdown(sig, loop):
+        logging.info(f"Received exit signal {sig.name}")
+        # Cancel all background tasks
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        [t.cancel() for t in tasks]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        loop.stop()
+
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(sig, loop)))
+        
+        # Register
 app.router.add_post("/scan", self.submit_scan_api)
 app.router.add_get("/status/{task_id}", self.get_task_status)
 app.router.add_get("/result/{task_id}", self.get_result)
+app.router.add_get("/health", self.health)
+app.router.add_get("/ready", self.ready)

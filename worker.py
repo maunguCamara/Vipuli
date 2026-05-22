@@ -55,21 +55,24 @@ class Worker:
                 pass
 
     async def task_polling_loop(self):
-        while True:
-            async with self.session.get(f"{self.coordinator_url}/task") as resp:
-                task_data = await resp.json()
-                task = task_data.get("task")
-                if task:
-                    # Execute task
-                    self.current_load += 1
-                    result = await self.execute_task(task)
-                    # Send result back
-                    await self.session.post(f"{self.coordinator_url}/result", json={
-                        "task_id": task["task_id"],
-                        "result": result
-                    })
-                    self.current_load -= 1
+           while True:
+                _, task_data = await redis.blpop("task_queue", timeout=5)
+                if task_data:
+                    task = json.loads(task_data)
+                    result = await execute_task(task)
+                    await redis.publish("results", json.dumps({"task_id": task["id"], "result": result}))
+                    
             await asyncio.sleep(1)  # poll interval
+
+    async def health(request):
+        return web.Response(status=200)
+
+    async def ready(request):
+        # Check database connection, last heartbeat, etc.
+        if coordinator.db_healthy and len(coordinator.nodes) > 0:
+            return web.Response(status=200)
+        return web.Response(status=503)
+
 
     async def execute_task(self, task: dict):
         target = task["target"]
@@ -78,3 +81,21 @@ class Worker:
             return await self.scanner.comprehensive_scan(target)
         else:
             return {"error": "unknown type"}
+
+    async def shutdown(sig, loop):
+        logging.info(f"Received exit signal {sig.name}")
+        # Cancel all background tasks
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        [t.cancel() for t in tasks]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        loop.stop()
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown(sig, loop)))
+
+
+app.router.add_post("/scan", self.submit_scan_api)
+app.router.add_get("/status/{task_id}", self.get_task_status)
+app.router.add_get("/result/{task_id}", self.get_result)
+app.router.add_get("/health", self.health)
+app.router.add_get("/ready", self.ready)
