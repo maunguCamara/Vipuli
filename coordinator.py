@@ -32,7 +32,7 @@ class Coordinator:
         system_config = config["system"]
         
         coordinator = Coordinator(coordinator_config, system_config)
-    await coordinator.start()
+        await coordinator.start()
 
     async def register_node(self, request):
         if request.headers.get("X-API-Key") != API_KEY:
@@ -135,7 +135,7 @@ class Coordinator:
         app = web.Application()
         app.router.add_post("/register", self.register_node)
         app.router.add_post("/heartbeat", self.heartbeat)
-        #app.router.add_get("/task", self.get_task)
+        app.router.add_get("/task", self.get_task)
         app.router.add_post("/result", self.submit_result)
         runner = web.AppRunner(app)
         await runner.setup()

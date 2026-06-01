@@ -3,7 +3,6 @@ import asyncio
 import aiohttp
 import logging
 from scanner_core import AdvancedScanner, MLReconEngine, ThreatIntelligence   # your scanning logic
-
 class Worker:
     def __init__(self, node_id: str, coordinator_url: str, capabilities: list, config: dict):
         self.node_id = node_id
@@ -35,6 +34,7 @@ class Worker:
         asyncio.create_task(self.task_polling_loop())
         # Keep running
         await asyncio.Event().wait()
+
 
     async def register(self):
         data = {
